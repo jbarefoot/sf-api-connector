@@ -67,12 +67,21 @@ final class ConnectionBundleImpl implements ConnectionBundle {
     @Nonnull
     private String password;
 
+    @GuardedBy("this")
+    private String sessionId;
+
     /**
      * Null if there is no current session, etc to use.
      */
     @Nullable
     @GuardedBy("this")
     private BindingConfig bindingConfig = null;
+
+
+    private String salesforceOrgId;
+    private String partnerServerUrl;
+    private String metadataServerUrl;
+
 
     private ConnectionBundleImpl(@Nonnull String username, @Nonnull String password, int maxConcurrentApiCalls,
             @Nonnull BindingRepository bindingRepository, boolean sandboxOrg) {
@@ -81,6 +90,20 @@ final class ConnectionBundleImpl implements ConnectionBundle {
         this.callSemaphore = new CallSemaphore();
 
         this.updateCredentials(username, password, maxConcurrentApiCalls);
+    }
+
+    public ConnectionBundleImpl(String salesforceOrgId, String sessionId, String partnerServerUrl, String metadataServerUrl, String username, int maxConcurrentApiCalls, BindingRepository bindingRepository, boolean sandboxOrg) {
+        this.sandboxOrg = sandboxOrg;
+        this.bindingRepository = bindingRepository;
+        this.callSemaphore = new CallSemaphore();
+
+        this.updateSessionId(sessionId, maxConcurrentApiCalls);
+
+        this.salesforceOrgId = salesforceOrgId;
+        this.orgId = new Id(salesforceOrgId);
+        this.partnerServerUrl = partnerServerUrl;
+        this.metadataServerUrl = metadataServerUrl;
+        this.username = username;
     }
 
     /**
@@ -99,6 +122,20 @@ final class ConnectionBundleImpl implements ConnectionBundle {
         return new ConnectionBundleImpl(username, password, maxConcurrentApiCalls,
                 bindingRepository, false);
     }
+
+    static ConnectionBundleImpl getNew(BindingRepository bindingRepository, String salesforceOrgId,
+            String sessionId, String partnerServerUrl, String metadataServerUrl, String username, int maxConcurrentApiCalls) {
+        return new ConnectionBundleImpl(salesforceOrgId, sessionId, partnerServerUrl, metadataServerUrl, username, maxConcurrentApiCalls,
+                bindingRepository, false);
+    }
+
+    static ConnectionBundleImpl getNewForSandbox(BindingRepository bindingRepository, String salesforceOrgId,
+            String sessionId, String partnerServerUrl, String metadataServerUrl, String username, int maxConcurrentApiCalls) {
+        return new ConnectionBundleImpl(salesforceOrgId, sessionId, partnerServerUrl, metadataServerUrl, username, maxConcurrentApiCalls,
+                bindingRepository, true);
+    }
+
+
 
     /**
      * Get a new ConnectionBundle for a sandbox SF org.
@@ -143,6 +180,25 @@ final class ConnectionBundleImpl implements ConnectionBundle {
             this.password = newPassword;
         }
     }
+
+    synchronized void updateSessionId(String sessionId, int maxConcurrentApiCalls) {
+        if(sessionId == null){
+            throw new NullPointerException("SessionId can't be null");
+        }
+        logger.trace("Updating maxApiCalls to " + maxConcurrentApiCalls);
+        this.callSemaphore.setMaxPermits(maxConcurrentApiCalls);
+
+        if (sessionId.equals(this.sessionId)) {
+            logger.trace("Got new sessionId that was equal to the old sessionId");
+        } else {
+            logger.trace("Updating sessionId to <" + sessionId + "> from <" + this.sessionId + ">");
+
+            this.bindingConfig = null;
+            this.sessionId = sessionId;
+        }
+
+    }
+
 
     @Nonnull
     @Override
@@ -228,32 +284,40 @@ final class ConnectionBundleImpl implements ConnectionBundle {
     @Nonnull
     public synchronized BindingConfig getBindingConfig() throws ApiException {
         if (this.bindingConfig == null) {
-            // need to login to get a session id
-
-            BindingConfig newBindingConfig;
-
-            newBindingConfig = this.bindingRepository
-                    .getBindingConfigData(this.username, this.password, this.callSemaphore, this.sandboxOrg);
-            String sessionId = newBindingConfig.getSessionId();
-
-            // never been set -- this is the first connection
-            if (this.orgId == null) {
-                this.orgId = newBindingConfig.getOrgId();
-                logger.trace("Setting the bundle's org id to <" + this.orgId + "> from its first connection");
-            } else {
-                // if the connections org id isn't what has been previously set, explode
-                if (!this.orgId.equals(newBindingConfig.getOrgId())) {
-                    throw new IllegalStateException(
-                            "Somehow got a binding with a different organization Id: expected <" + this.orgId +
-                                    ">, got <" + newBindingConfig.getOrgId() +
-                                    ">. Did you update the credentials to those of a different org?");
+            if(this.password == null){
+                if(sessionId == null){
+                    throw new IllegalStateException("If not supplied a password, the sessionId must be configured by calling code");
                 }
+
+                this.bindingConfig = new BindingConfig(this.orgId, this.sessionId, this.partnerServerUrl, this.metadataServerUrl, this.username);
+            } else{
+                // need to login to get a session id
+
+                BindingConfig newBindingConfig;
+
+                newBindingConfig = this.bindingRepository
+                        .getBindingConfigData(this.username, this.password, this.callSemaphore, this.sandboxOrg);
+                String sessionId = newBindingConfig.getSessionId();
+
+                // never been set -- this is the first connection
+                if (this.orgId == null) {
+                    this.orgId = newBindingConfig.getOrgId();
+                    logger.trace("Setting the bundle's org id to <" + this.orgId + "> from its first connection");
+                } else {
+                    // if the connections org id isn't what has been previously set, explode
+                    if (!this.orgId.equals(newBindingConfig.getOrgId())) {
+                        throw new IllegalStateException(
+                                "Somehow got a binding with a different organization Id: expected <" + this.orgId +
+                                        ">, got <" + newBindingConfig.getOrgId() +
+                                        ">. Did you update the credentials to those of a different org?");
+                    }
+                }
+
+                logger.trace("User " + this.username + ", session id " + sessionId + " on metadata server" +
+                        newBindingConfig.getMetadataServerUrl());
+
+                this.bindingConfig = newBindingConfig;
             }
-
-            logger.trace("User " + this.username + ", session id " + sessionId + " on metadata server" +
-                    newBindingConfig.getMetadataServerUrl());
-
-            this.bindingConfig = newBindingConfig;
         }
 
         // we now know there is at least one valid session id

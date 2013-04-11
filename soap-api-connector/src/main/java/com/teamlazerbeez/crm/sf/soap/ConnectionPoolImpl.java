@@ -16,6 +16,7 @@
 
 package com.teamlazerbeez.crm.sf.soap;
 
+import com.teamlazerbeez.crm.sf.core.Id;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -101,11 +102,46 @@ public final class ConnectionPoolImpl<T> implements ConnectionPool<T> {
         }
     }
 
+    @Override
+    public void configureOrg(@Nonnull T orgIdentifier, @Nonnull String salesforceOrgId, @Nonnull String sessionId,
+            @Nonnull String partnerServerUrl,
+            @Nonnull String metadataServerUrl, @Nonnull String username, int maxConcurrentApiCalls) {
+        configureOrgImpl(orgIdentifier, salesforceOrgId, sessionId, partnerServerUrl, metadataServerUrl, username, maxConcurrentApiCalls, this.orgIdToBundleMap, NORMAL_BUNDLE_FACTORY);
+    }
+
+    @Override
+    public void configureSandboxOrg(@Nonnull T orgIdentifier, @Nonnull String salesforceOrgId,
+            @Nonnull String sessionId, @Nonnull String partnerServerUrl,
+            @Nonnull String metadataServerUrl, @Nonnull String username, int maxConcurrentApiCalls) {
+        configureOrgImpl(orgIdentifier, salesforceOrgId, sessionId, partnerServerUrl, metadataServerUrl, username, maxConcurrentApiCalls, this.orgIdToSandboxBundleMap, SANDBOX_BUNDLE_FACTORY);
+    }
+
+
+
+   private void configureOrgImpl(T orgId, String salesforceOrgId, String sessionId, String partnerServerUrl, String metadataServerUrl, String username, int maxConcurrentApiCalls,
+            Map<T, ConnectionBundleImpl> bundles, BundleFactory bundleFactory) {
+        ConnectionBundleImpl cp = bundles.get(orgId);
+
+        if (cp == null) {
+            logger.debug("Initial configuration for org " + orgId);
+
+            bundles.put(orgId,
+                    bundleFactory.getBundle(this.bindingRepository, salesforceOrgId, sessionId, partnerServerUrl, metadataServerUrl, username, maxConcurrentApiCalls));
+        } else {
+            logger.debug("Updating existing configuration for org " + orgId);
+
+            cp.updateSessionId(sessionId, maxConcurrentApiCalls);
+        }
+    }
+
     @ThreadSafe
     private static interface BundleFactory {
         @Nonnull
         ConnectionBundleImpl getBundle(@Nonnull BindingRepository bindingRepository, @Nonnull String username,
                 @Nonnull String password, int maxConcurrentApiCalls);
+
+        ConnectionBundleImpl getBundle(BindingRepository bindingRepository, String salesforceOrgId, String sessionId,
+                String partnerServerUrl, String metadataServerUrl, String username, int maxConcurrentApiCalls);
     }
 
     @Immutable
@@ -116,6 +152,13 @@ public final class ConnectionPoolImpl<T> implements ConnectionPool<T> {
                 @Nonnull String password, int maxConcurrentApiCalls) {
             return ConnectionBundleImpl.getNew(bindingRepository, username, password, maxConcurrentApiCalls);
         }
+
+        @Override
+        public ConnectionBundleImpl getBundle(BindingRepository bindingRepository, String salesforceOrgId,
+                String sessionId, String partnerServerUrl, String metadataServerUrl, String username, int maxConcurrentApiCalls) {
+            return ConnectionBundleImpl.getNew(bindingRepository, salesforceOrgId, sessionId, partnerServerUrl, metadataServerUrl, username, maxConcurrentApiCalls);
+        }
+
     }
 
     @Immutable
@@ -126,5 +169,12 @@ public final class ConnectionPoolImpl<T> implements ConnectionPool<T> {
                 @Nonnull String password, int maxConcurrentApiCalls) {
             return ConnectionBundleImpl.getNewForSandbox(bindingRepository, username, password, maxConcurrentApiCalls);
         }
+
+        @Override
+        public ConnectionBundleImpl getBundle(BindingRepository bindingRepository, String salesforceOrgId,
+                String sessionId, String partnerServerUrl, String metadataServerUrl, String username, int maxConcurrentApiCalls) {
+            return ConnectionBundleImpl.getNewForSandbox(bindingRepository, salesforceOrgId, sessionId, partnerServerUrl, metadataServerUrl, username, maxConcurrentApiCalls);
+        }
+
     }
 }

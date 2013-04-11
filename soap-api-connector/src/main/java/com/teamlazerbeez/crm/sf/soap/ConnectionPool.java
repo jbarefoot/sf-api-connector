@@ -69,6 +69,7 @@ public interface ConnectionPool<T> {
     void configureOrg(@Nonnull T orgIdentifier, @Nonnull String username, @Nonnull String password,
             int maxConcurrentApiCalls);
 
+
     /**
      * Just like the relationship between ConnectionPool#configureOrg and ConnectionPool#getConnectionBundle, this must
      * be called before ConnectionPool#getSandboxConnectionBundle is called.
@@ -80,4 +81,21 @@ public interface ConnectionPool<T> {
      */
     void configureSandboxOrg(@Nonnull T orgIdentifier, @Nonnull String username, @Nonnull String password,
             int maxConcurrentApiCalls);
+
+
+    /**  Version that allows a sessionId and other connection ifno to be specified externally, for example from info obtained from oauth
+     *   Session id expiration will NOT be handled automatically in this case, because there is no username/password to reauthenticate with
+     *
+     * @param orgIdentifier         the org id
+     * @param sessionId             the salesforce session id e.g. an oauth token value is valid as a session id
+     * @param username              the username for the org's sf admin
+     * @param partnerServerUrl      the partner server url
+     * @param metadataServerUrl     the metadata server url
+     * @param maxConcurrentApiCalls how many concurrent api calls should be allowed
+     */
+    void configureOrg(@Nonnull T orgIdentifier, @Nonnull String salesforceOrgId, @Nonnull String sessionId,
+            @Nonnull String partnerServerUrl, @Nonnull String metadataServerUrl, @Nonnull String username, int maxConcurrentApiCalls);
+
+    void configureSandboxOrg(@Nonnull T orgIdentifier, @Nonnull String salesforceOrgId, @Nonnull String sessionId,
+            @Nonnull String partnerServerUrl, @Nonnull String metadataServerUrl, @Nonnull String username, int maxConcurrentApiCalls);
 }

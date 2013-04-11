@@ -22,7 +22,7 @@ import javax.annotation.concurrent.Immutable;
  * Holds constants that define (in conjunction with the wsdl version) which Salesforce API version to use.
  */
 @Immutable
-final class ApiVersion {
+public final class ApiVersion {
 
     /*
     * WHEN UPDATING THE WSDL VERSION:
