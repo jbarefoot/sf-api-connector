@@ -83,5 +83,8 @@ public final class Id {
         return this.idStr.hashCode();
     }
 
-
+    @Nonnull
+    public String getOriginalIdStr() {
+        return originalIdStr;
+    }
 }
