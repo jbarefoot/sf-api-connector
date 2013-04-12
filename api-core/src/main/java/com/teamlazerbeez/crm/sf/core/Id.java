@@ -34,6 +34,12 @@ public final class Id {
     private final String idStr;
 
     /**
+     * The id string this Id instance was constructed with.  Useful if you want to get at the 18 character id returned by the API, which is unique even with case insensitive comparisons
+     */
+    @Nonnull
+    private final String originalIdStr;
+
+    /**
      * @param id the sf record id to wrap. Must not be null. It can be 15 or 18 characters long, but it will be
      *           truncated to 15 characters either way.
      */
@@ -41,6 +47,7 @@ public final class Id {
         if (id == null) {
             throw new NullPointerException("An Id must have a non-null string");
         }
+        originalIdStr = id;
 
         if (id.length() != 15 && id.length() != 18) {
             throw new IllegalArgumentException(
@@ -75,4 +82,6 @@ public final class Id {
     public int hashCode() {
         return this.idStr.hashCode();
     }
+
+
 }
